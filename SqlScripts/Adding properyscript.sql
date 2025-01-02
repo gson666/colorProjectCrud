@@ -1,0 +1,1 @@
+ALTER TABLE Colors ADD HexCode NVARCHAR(7) NULL;

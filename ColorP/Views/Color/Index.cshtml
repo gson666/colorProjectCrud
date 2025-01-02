@@ -1,0 +1,196 @@
+﻿@model IEnumerable<Color>
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>טבלת צבעים</title>
+    <link rel="stylesheet" href="@Url.Content("~/css/site.css")" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>
+</head>
+<body>
+    <h1>טבלת צבעים</h1>
+    <button id="add-color-btn" class="add-btn">הוספה</button>
+    <table>
+        <thead>
+            <tr>
+                <th>שם צבע</th>
+                <th>מחיר</th>
+                <th>מיקום בטבלה</th>
+                <th>במלאי</th>
+                <th>קוד צבע</th>
+                <th>פעולות</th>
+            </tr>
+        </thead>
+        <tbody id="sortable-tbody">
+            @foreach (var color in Model)
+            {
+                var background = @color.HexCode ?? "#FFFFFF";
+                <tr class="color-row" style="background-color:@background;" data-id="@color.Id">
+                    <td>@color.Name</td>
+                    <td>@color.Price</td>
+                    <td class="display-order">@color.DisplayOrder</td>
+                    <td>@(color.IsInStock ? "כן" : "לא")</td>
+                    <td>
+                        <span class="color-box" style="background-color:@background;"></span>
+                        <span>@color.HexCode</span>
+                    </td>
+                    <td>
+                        <button class="edit-btn">עריכה</button>
+                        <button class="delete-btn">מחיקה</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <div id="color-modal" title="Color Details">
+        <input type="hidden" id="color-id" />
+        <div>
+            <label>בחר צבע:</label>
+            <input type="color" id="color-picker" />
+        </div>
+        <div>
+            <label>Hex Code:</label>
+            <input type="text" id="color-hex" readonly />
+        </div>
+        <div>
+            <label>שם צבע:</label>
+            <input type="text" id="color-name" />
+        </div>
+        <div>
+            <label>מחיר:</label>
+            <input type="number" id="color-price" />
+        </div>
+        <div>
+            <label>מיקום בטבלה:</label>
+            <input type="number" id="color-display" />
+        </div>
+        <div>
+            <label>
+                <input type="checkbox" id="color-stock" /> במלאי?
+            </label>
+        </div>
+        <button id="save-color-btn">שמור</button>
+    </div>
+
+    <script>
+        $(function () {
+            const resetModal = () => {
+                $('#color-id, #color-name, #color-price, #color-display, #color-hex').val('');
+                $('#color-stock').prop('checked', false);
+                $('#color-picker').val('#000000');
+            };
+
+            const validateInputs = (color) => {
+                if (!color.Name || color.Name.trim() === "") {
+                    alert("חובה להזין שם צבע.");
+                    return false;
+                }
+                if (isNaN(color.Price) || color.Price <= 0) {
+                    alert("מחיר חייב להיות מספר חיובי.");
+                    return false;
+                }
+                if (isNaN(color.DisplayOrder) || color.DisplayOrder <= 0) {
+                    alert("מיקום בטבלה חייב להיות מספר חיובי.");
+                    return false;
+                }
+                const hexRegex = /^#[0-9A-Fa-f]{6}$/;
+                if (!hexRegex.test(color.HexCode)) {
+                    alert("קוד צבע חייב להיות בפורמט #RRGGBB.");
+                    return false;
+                }
+                return true;
+            };
+
+            // Enable sortable functionality
+            $("#sortable-tbody").sortable({
+                placeholder: "ui-state-highlight",
+                update: function () {
+                    const updatedOrder = [];
+                    $("#sortable-tbody tr").each(function (index) {
+                        const id = $(this).data("id");
+                        updatedOrder.push({ id: id, displayOrder: index + 1 });
+                        $(this).find(".display-order").text(index + 1);
+                    });
+
+                    $.ajax({
+                        url: "/Color/UpdateOrder",
+                        type: "POST",
+                        contentType: "application/json",
+                        data: JSON.stringify(updatedOrder),
+                        success: function () {
+                            alert("סדר התצוגה עודכן בהצלחה!");
+                        },
+                        error: function (xhr) {
+                            console.error("שגיאה בעדכון סדר התצוגה:", xhr.responseText);
+                            alert("אירעה שגיאה בעדכון סדר התצוגה.");
+                        }
+                    });
+                }
+            }).disableSelection();
+
+            $('#add-color-btn').click(() => {
+                resetModal();
+                $('#color-modal').dialog('open');
+            });
+
+            $('#color-picker').on('input', function () {
+                $('#color-hex').val($(this).val());
+            });
+
+            $('#save-color-btn').click(() => {
+                const color = {
+                    Id: $('#color-id').val() || null,
+                    Name: $('#color-name').val().trim(),
+                    Price: parseFloat($('#color-price').val()),
+                    DisplayOrder: parseInt($('#color-display').val()),
+                    IsInStock: $('#color-stock').is(':checked'),
+                    HexCode: $('#color-hex').val().trim(),
+                };
+
+                if (!validateInputs(color)) return;
+
+                const url = color.Id ? '/Color/Update' : '/Color/Add';
+                $.post(url, color)
+                    .done(() => location.reload())
+                    .fail((xhr) => {
+                        console.error('שגיאה:', xhr.responseText);
+                        alert('אירעה שגיאה בשמירת הצבע.');
+                    });
+            });
+
+            $('.edit-btn').click(function () {
+                const row = $(this).closest('tr');
+                $('#color-id').val(row.data('id'));
+                $('#color-name').val(row.find('td:eq(0)').text().trim());
+                $('#color-price').val(row.find('td:eq(1)').text().trim());
+                $('#color-display').val(row.find('td:eq(2)').text().trim());
+                $('#color-stock').prop('checked', row.find('td:eq(3)').text().trim() === "כן");
+                $('#color-hex').val(row.find('.color-box').css('background-color'));
+                $('#color-picker').val(row.find('.color-box').css('background-color'));
+                $('#color-modal').dialog('open');
+            });
+
+            $('.delete-btn').click(function () {
+                const id = $(this).closest('tr').data('id');
+                if (confirm('האם אתה בטוח שברצונך למחוק את הצבע?')) {
+                    $.post('/Color/Delete', { id })
+                        .done(() => location.reload())
+                        .fail((xhr) => {
+                            console.error('שגיאה:', xhr.responseText);
+                            alert('אירעה שגיאה במחיקת הצבע.');
+                        });
+                }
+            });
+
+            $('#color-modal').dialog({
+                autoOpen: false,
+                modal: true,
+                width: 400,
+            });
+        });
+    </script>
+</body>
+</html>
